@@ -12,7 +12,10 @@ logging.basicConfig(level=logging.INFO)
 def execute(job_id):
     with Session() as db:
         j=db.get(Job,job_id)
-        if not j or j.status!='queued':return
+        if not j or j.status not in ('queued','invalid'):return
+        if j.invalidated:
+            j.status='invalid';j.error='关联数据因身份更正已失效，不再计算';db.commit()
+            record(db,'worker','job.invalidated',{'id':j.id});db.commit();return
         j.status='running'; db.commit()
         try:
             d=db.get(Dataset,j.dataset_id)

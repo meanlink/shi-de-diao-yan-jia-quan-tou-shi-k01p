@@ -9,7 +9,9 @@ def create(db, data):
     if len(name)<2: raise HTTPException(422, '批次名称去除空格后至少需要两个字符')
     if db.scalar(select(Dataset).where(Dataset.name==name)):
         raise HTTPException(409, '该数据批次名已存在，请修改名称')
+    normalized=[]
     for index,row in enumerate(data.records):
+        row=dict(row)
         for c in metadata()['columns']:
             value=row.get(c['key'])
             if value is None or value=='': raise HTTPException(422, f'第 {index+1} 行缺少字段 {c["label"]}')
@@ -18,6 +20,7 @@ def create(db, data):
                     if isinstance(value,bool) or not math.isfinite(float(value)): raise ValueError()
                     row[c['key']]=float(value)
                 except (TypeError, ValueError, OverflowError): raise HTTPException(422, f'第 {index+1} 行 {c["label"]} 必须为有限数值')
-    d=Dataset(name=name, source=data.source, records=data.records, checksum=checksum(data.records), created_at=time.time())
+        normalized.append(row)
+    d=Dataset(name=name, source=data.source, records=normalized, checksum=checksum(normalized), created_at=time.time())
     db.add(d); db.flush()
     return d

@@ -2,11 +2,14 @@ import time, json
 from sqlalchemy import select, func
 from src.config.database import Session
 from migrations.initial import migrate
-from src.models import User, Dataset, Job, Report, Delivery, Audit
+from src.models import User, Dataset, Job, Report, Delivery, Audit, Observation
 from src.services.business import metadata, seed_records, analyze
 from src.services.reports import deliver
+from src.services import ledger as ledger_service
 from src.utils.security import hash_password
 from src.utils.serialization import checksum
+
+
 def seed():
     migrate()
     with Session() as db:
@@ -31,8 +34,11 @@ def seed():
             r=Report(name='每日业务复核简报',job_id=j.id,destination='业务复核组 · 本地收件箱',interval_seconds=86400,next_run=time.time()+86400,enabled=True)
             db.add(r);db.flush();deliver(db,r)
             db.add(Audit(actor='seed',action='demo.baseline',detail={'dataset':d.id},at=time.time()))
+        if not db.scalar(select(Observation).limit(1)):
+            imported=ledger_service.import_daily_table(db, d, 'seed')
+            db.add(Audit(actor='seed',action='demo.ledger_ingest',detail={'dataset':d.id,'observations':imported['observations']},at=time.time()))
         db.commit()
-        counts={model.__tablename__:db.scalar(select(func.count()).select_from(model)) for model in [User,Dataset,Job,Report,Delivery,Audit]}
+        counts={model.__tablename__:db.scalar(select(func.count()).select_from(model)) for model in [User,Dataset,Job,Report,Delivery,Audit,Observation]}
         print(json.dumps(counts,ensure_ascii=False))
         return counts
 if __name__=='__main__':seed()

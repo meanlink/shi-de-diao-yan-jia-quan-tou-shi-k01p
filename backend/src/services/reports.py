@@ -6,14 +6,19 @@ def create(db, data):
     j=db.get(Job,data.job_id)
     if not j or j.status!='completed' or not j.approved:
         raise HTTPException(409,'请先选择已完成且获批准的分析结果')
+    if getattr(j,'invalidated',False):
+        raise HTTPException(409,'该分析因关联数据身份更正已失效，不能安排分发')
     r=Report(name=data.name, job_id=j.id, destination=data.destination, interval_seconds=data.interval_seconds, next_run=time.time()+data.delay_seconds, enabled=True)
     db.add(r); db.flush()
     return r
 def deliver(db, report):
     j=db.get(Job,report.job_id)
     if not j or not j.approved: return
+    if getattr(j,'invalidated',False):
+        report.enabled=False
+        return
     out=io.StringIO()
-    out.write('\ufeff')
+    out.write('﻿')
     table=j.result.get('table',{})
     cols=table.get('columns',[])
     writer=csv.writer(out)
